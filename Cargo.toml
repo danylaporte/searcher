@@ -1,0 +1,13 @@
+[package]
+name = "searcher"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+levenshtein_automata = "0.2"
+fxhash = "0.2"
+indexmap = "2.2"
+once_cell = "1"
+roaring = "0.10"
+str_utils = { git = "https://github.com/danylaporte/str_utils.git" }
+uuid = { version = "1" }
