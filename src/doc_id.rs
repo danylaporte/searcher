@@ -6,3 +6,9 @@ impl DocId {
         self.0 as usize
     }
 }
+
+impl From<u32> for DocId {
+    fn from(value: u32) -> Self {
+        Self(value)
+    }
+}
