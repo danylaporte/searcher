@@ -11,13 +11,17 @@ impl SearchQuery {
         let mut chars = s.chars().peekable();
         let mut words = Vec::new();
 
-        while let Some(token) = parse_token(&mut chars) {
+        while let Some(token) = parse_token(&mut chars, words.len()) {
             if !token.word.is_empty() {
                 words.push(token);
             }
         }
 
         Self { words }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.words.is_empty()
     }
 }
 
@@ -27,7 +31,7 @@ impl From<&str> for SearchQuery {
     }
 }
 
-fn parse_token(chars: &mut Peekable<Chars>) -> Option<WordQuery> {
+fn parse_token(chars: &mut Peekable<Chars>, index: usize) -> Option<WordQuery> {
     let mut presence = Presence::Optional;
     let mut op = WordQueryOp::Fuzzy;
     let mut text = String::new();
@@ -83,7 +87,7 @@ fn parse_token(chars: &mut Peekable<Chars>) -> Option<WordQuery> {
         chars.next();
     }
 
-    Some(WordQuery::new(text.into_boxed_str(), op, presence))
+    Some(WordQuery::new(text.into_boxed_str(), op, presence, index))
 }
 
 fn take_until<F>(chars: &mut Peekable<Chars>, s: &mut String, f: F)
@@ -100,4 +104,37 @@ where
             s.push(' ');
         }
     }
+}
+
+#[test]
+fn single_word() {
+    assert_eq!(
+        SearchQuery::new("start*").words,
+        vec![("start", WordQueryOp::StartsWith)]
+    );
+    assert_eq!(
+        SearchQuery::new("*end").words,
+        vec![("end", WordQueryOp::EndsWith)]
+    );
+    assert_eq!(
+        SearchQuery::new("*contains*").words,
+        vec![("contains", WordQueryOp::Contains)]
+    );
+    assert_eq!(
+        SearchQuery::new("fuzzy").words,
+        vec![("fuzzy", WordQueryOp::Fuzzy)]
+    );
+}
+
+#[test]
+fn multiple_words() {
+    assert_eq!(
+        SearchQuery::new("starT* *eNd *Contains* Fuzzy").words,
+        vec![
+            ("start", WordQueryOp::StartsWith),
+            ("end", WordQueryOp::EndsWith),
+            ("contains", WordQueryOp::Contains),
+            ("fuzzy", WordQueryOp::Fuzzy)
+        ]
+    );
 }

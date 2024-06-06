@@ -1,6 +1,6 @@
 use crate::Direction;
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct AttrProps {
     pub(crate) direction: Option<Direction>,
     pub(crate) priority: Option<u8>,

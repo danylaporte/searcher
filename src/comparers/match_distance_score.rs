@@ -1,13 +1,19 @@
 use crate::{index_to_query::IndexToQuery, MatchDistance};
 use std::cmp::{min, Ordering};
 
-#[derive(Default)]
 pub(super) struct MatchDistanceScore {
     dirty: bool,
     recs: Vec<Rec>,
 }
 
 impl MatchDistanceScore {
+    pub const fn new() -> Self {
+        Self {
+            dirty: false,
+            recs: Vec::new(),
+        }
+    }
+
     /// Add a distance keeping only the best matches for each query.
     fn add_word(&mut self, index: &IndexToQuery, word: *const str) {
         if let Some(entry) = index.get(word) {
@@ -66,7 +72,13 @@ impl Eq for MatchDistanceScore {}
 
 impl Ord for MatchDistanceScore {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.recs.cmp(&other.recs)
+        let mut o = self.recs.is_empty().cmp(&other.recs.is_empty());
+
+        if o.is_eq() {
+            o = self.recs.cmp(&other.recs);
+        }
+
+        o
     }
 }
 

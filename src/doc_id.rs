@@ -8,6 +8,7 @@ impl DocId {
 }
 
 impl From<u32> for DocId {
+    #[inline]
     fn from(value: u32) -> Self {
         Self(value)
     }

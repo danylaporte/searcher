@@ -1,4 +1,4 @@
-use crate::{Comparer, Direction, DocId, IndexResults, Searcher};
+use crate::{Direction, DocId, IndexResults, Searcher};
 use roaring::RoaringBitmap;
 
 pub struct SearchResults<'a> {
@@ -21,10 +21,6 @@ impl<'a> SearchResults<'a> {
             forward,
             searcher,
         }
-    }
-
-    pub fn comparer(&self) -> Comparer {
-        Comparer::new(self, self)
     }
 
     pub fn contains_doc_id(&self, id: DocId) -> bool {

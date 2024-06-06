@@ -1,13 +1,13 @@
 use crate::{
-    AttrId, AttrProps, Direction, DocId, Index, IndexLog, IndexResults, IndexToQuery, MatchEntry,
-    Presence, SearchQuery, SearchResults,
+    AttrProps, Direction, DocId, Index, IndexLog, IndexResults, IndexToQuery, MatchEntry, Presence,
+    SearchQuery, SearchResults,
 };
 use indexmap::IndexMap;
 use once_cell::sync::OnceCell;
 use roaring::RoaringBitmap;
 
 pub struct Searcher {
-    attrs: IndexMap<AttrId, Attr, fxhash::FxBuildHasher>,
+    attrs: IndexMap<Box<str>, Attr, fxhash::FxBuildHasher>,
     attrs_priorities: OnceCell<Vec<Vec<(Direction, usize)>>>,
     backward: Index,
     forward: Index,
@@ -41,6 +41,18 @@ impl Searcher {
         match direction {
             Direction::Forward => &mut self.forward,
             Direction::Backward => &mut self.backward,
+        }
+    }
+
+    pub fn insert_doc_attribute(&mut self, doc_id: DocId, name: &str, value: &str) {
+        let mut log = IndexLog::default();
+
+        if let Some(a) = self.attrs.get(name) {
+            let direction = a.direction;
+            let attr_index = a.index;
+
+            self.direction_index_mut(direction)
+                .insert_doc_attribute(doc_id, attr_index, value, &mut log);
         }
     }
 
@@ -119,10 +131,10 @@ impl Searcher {
         self.attrs_priorities = OnceCell::new();
     }
 
-    pub fn remove_attr(&mut self, id: AttrId) -> bool {
+    pub fn remove_attr(&mut self, name: &str) -> bool {
         let mut log = IndexLog::default();
 
-        match self.attrs.shift_remove(&id) {
+        match self.attrs.shift_remove(name) {
             Some(a) => {
                 self.direction_index_mut(a.direction)
                     .remove_attr(a.index, &mut log);
@@ -139,14 +151,14 @@ impl Searcher {
         self.forward.remove_doc(doc_id);
     }
 
-    pub fn set_attribute(&mut self, id: AttrId, attr: AttrProps) -> bool {
-        if self.attrs.contains_key(&id) {
+    pub fn set_attribute(&mut self, name: String, attr: AttrProps) -> bool {
+        if self.attrs.contains_key(name.as_str()) {
             false
         } else {
             let direction = attr.direction.unwrap_or_default();
 
             self.attrs.insert(
-                id,
+                name.into_boxed_str(),
                 Attr {
                     direction: attr.direction.unwrap_or_default(),
                     priority: attr.priority.unwrap_or_default(),
@@ -157,18 +169,6 @@ impl Searcher {
             self.reindex_attribute(direction);
 
             true
-        }
-    }
-
-    pub fn update_doc_attribute(&mut self, doc_id: DocId, attr_id: AttrId, value: &str) {
-        let mut log = IndexLog::default();
-
-        if let Some(a) = self.attrs.get(&attr_id) {
-            let direction = a.direction;
-            let attr_index = a.index;
-
-            self.direction_index_mut(direction)
-                .insert_doc_attribute(doc_id, attr_index, value, &mut log);
         }
     }
 }

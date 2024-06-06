@@ -1,8 +1,10 @@
-use std::cmp::min;
-
 use crate::{presence::Presence, Direction, WordQueryOp};
 use levenshtein_automata::{LevenshteinAutomatonBuilder, DFA};
 use once_cell::sync::OnceCell;
+use std::{
+    cmp::min,
+    fmt::{self, Debug, Formatter},
+};
 
 pub(crate) struct WordQuery {
     backward_dfa: OnceCell<Option<DFA>>,
@@ -18,12 +20,12 @@ pub(crate) struct WordQuery {
 }
 
 impl WordQuery {
-    pub(crate) fn new(word: Box<str>, op: WordQueryOp, presence: Presence) -> Self {
+    pub(crate) fn new(word: Box<str>, op: WordQueryOp, presence: Presence, index: usize) -> Self {
         Self {
             backward_dfa: OnceCell::new(),
             backward_word: OnceCell::new(),
             dfa: OnceCell::new(),
-            index: 0,
+            index,
             len: min(word.chars().count(), u8::MAX as usize) as u8,
             op,
             presence,
@@ -59,11 +61,29 @@ impl WordQuery {
     }
 }
 
+impl Debug for WordQuery {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WordQuery")
+            .field("op", &self.op)
+            .field("presence", &self.presence)
+            .field("word", &self.word)
+            .finish()
+    }
+}
+
+#[cfg(test)]
+impl PartialEq<(&str, WordQueryOp)> for WordQuery {
+    fn eq(&self, other: &(&str, WordQueryOp)) -> bool {
+        &*self.word == other.0 && self.op == other.1
+    }
+}
+
 fn init_dfa<'a>(dfa: &'a OnceCell<Option<DFA>>, word: &str, len: u8) -> Option<&'a DFA> {
     dfa.get_or_init(|| match len {
         0..=2 => None,
-        3..=4 => Some(LevenshteinAutomatonBuilder::new(1, true).build_prefix_dfa(word)),
-        5.. => Some(LevenshteinAutomatonBuilder::new(2, true).build_prefix_dfa(word)),
+        3..=5 => Some(LevenshteinAutomatonBuilder::new(1, true).build_prefix_dfa(word)),
+        6..=8 => Some(LevenshteinAutomatonBuilder::new(2, true).build_prefix_dfa(word)),
+        9.. => Some(LevenshteinAutomatonBuilder::new(3, true).build_prefix_dfa(word)),
     })
     .as_ref()
 }

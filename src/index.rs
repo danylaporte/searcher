@@ -3,7 +3,8 @@ use fxhash::FxBuildHasher;
 use indexmap::{IndexMap, IndexSet};
 use levenshtein_automata::Distance;
 use roaring::RoaringBitmap;
-use std::{cmp::min, mem::take};
+use std::{cmp::min, iter::Peekable, mem::take, str::Chars};
+use str_utils::char_map::lower_no_accent_char;
 
 #[derive(Default)]
 struct Doc {
@@ -220,9 +221,12 @@ impl Index {
                 0,
                 |word, data| match dfa.eval(word) {
                     Distance::AtLeast(_) => None,
-                    Distance::Exact(0) => Some(MatchDistance::Exact(data.len - query.len)),
+                    Distance::Exact(0) => Some(MatchDistance::Exact(
+                        data.len.saturating_sub(query.len) + query.len.saturating_sub(data.len),
+                    )),
                     Distance::Exact(n) => Some(MatchDistance::Fuzzy(
-                        (data.len - query.len).saturating_add(n),
+                        (data.len.saturating_sub(query.len) + query.len.saturating_sub(data.len))
+                            .saturating_add(n),
                     )),
                 },
                 out,
@@ -248,10 +252,62 @@ impl Index {
         value: &str,
         log: &mut IndexLog,
     ) {
-        let new_word_list = value
-            .split(|c: char| !c.is_alphanumeric())
-            .map(|word| self.add_word_doc(word, doc_id, &mut log.str))
-            .collect::<Vec<_>>();
+        fn find_next_word(chars: &mut Peekable<Chars>, word: &mut String) {
+            #[derive(Clone, Copy)]
+            enum CharKind {
+                Whitespace,
+                Alpha,
+                Number,
+            }
+
+            let mut kind = CharKind::Whitespace;
+
+            word.clear();
+
+            while let Some(&c) = chars.peek() {
+                if c.is_alphabetic() {
+                    if !matches!(kind, CharKind::Alpha | CharKind::Whitespace) {
+                        break;
+                    }
+
+                    word.extend(lower_no_accent_char(c));
+                    kind = CharKind::Alpha;
+                } else if c.is_numeric() {
+                    if !matches!(kind, CharKind::Number | CharKind::Whitespace) {
+                        break;
+                    }
+
+                    word.push(c);
+                    kind = CharKind::Number;
+                } else if c == '#' || c == '°' {
+                    if matches!(kind, CharKind::Whitespace) {
+                        chars.next();
+                        word.push(c);
+                    }
+
+                    break;
+                } else if !word.is_empty() {
+                    chars.next();
+                    break;
+                }
+
+                chars.next();
+            }
+        }
+
+        let mut word = String::new();
+        let mut new_word_list = Vec::new();
+        let mut chars = value.chars().peekable();
+
+        loop {
+            find_next_word(&mut chars, &mut word);
+
+            if word.is_empty() {
+                break;
+            }
+
+            new_word_list.push(self.add_word_doc(&word, doc_id, &mut log.str));
+        }
 
         let doc = match self.docs.get_mut(doc_id.index()) {
             Some(doc) => doc,
@@ -362,6 +418,9 @@ impl Index {
     }
 }
 
+unsafe impl Send for Index {}
+unsafe impl Sync for Index {}
+
 #[derive(Default)]
 pub(crate) struct IndexLog {
     docs: Vec<u32>,
@@ -386,7 +445,7 @@ mod tests {
     }
 
     fn create_query(word: &str, op: WordQueryOp, presence: Presence) -> WordQuery {
-        WordQuery::new(word.into(), op, presence)
+        WordQuery::new(word.into(), op, presence, 0)
     }
 
     #[test]
@@ -509,6 +568,32 @@ mod tests {
                 (MatchDistance::Exact(0), "country")
             ]
         );
+    }
+
+    #[test]
+    fn fuzzy_longer_query() {
+        let mut matches = Vec::new();
+        let index = create_index(&["country"], Direction::Forward);
+
+        index.query(
+            &create_query("countries", WordQueryOp::Fuzzy, Presence::Optional),
+            &mut matches,
+        );
+
+        assert_eq!(matches, vec![(MatchDistance::Fuzzy(5), "country"),]);
+    }
+
+    #[test]
+    fn fuzzy_3_letter_query() {
+        let mut matches = Vec::new();
+        let index = create_index(&["dmo"], Direction::Forward);
+
+        index.query(
+            &create_query("dmo", WordQueryOp::Fuzzy, Presence::Optional),
+            &mut matches,
+        );
+
+        assert_eq!(matches, vec![(MatchDistance::Exact(0), "dmo"),]);
     }
 
     #[test]

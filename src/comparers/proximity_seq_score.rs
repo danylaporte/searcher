@@ -1,7 +1,6 @@
 use crate::IndexToQuery;
 use std::cmp::{max, min, Ordering};
 
-#[derive(Default)]
 pub(super) struct ProximitySeqScore {
     count: usize,
     locations: Vec<Option<usize>>,
@@ -10,6 +9,15 @@ pub(super) struct ProximitySeqScore {
 }
 
 impl ProximitySeqScore {
+    pub(super) const fn new() -> Self {
+        Self {
+            count: 0,
+            locations: Vec::new(),
+            proximity: 0,
+            seq: 0,
+        }
+    }
+
     fn add_word(&mut self, index: &IndexToQuery, word: *const str, word_location: usize) {
         if let Some(entry) = index.get(word) {
             let loc = match self.locations.get_mut(entry.query_index) {
@@ -92,7 +100,7 @@ impl Ord for ProximitySeqScore {
             o = self.proximity.cmp(&other.proximity);
 
             if o.is_eq() {
-                o = other.seq.cmp(&other.seq);
+                o = other.seq.cmp(&self.seq);
             }
         }
 

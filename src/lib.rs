@@ -1,4 +1,3 @@
-mod attr_id;
 mod attr_props;
 mod comparers;
 mod direction;
@@ -15,10 +14,9 @@ mod searcher;
 mod word_query;
 mod word_query_op;
 
-use attr_id::AttrId;
 pub use attr_props::AttrProps;
-pub use comparers::Comparer;
-use direction::Direction;
+pub use comparers::compare;
+pub use direction::Direction;
 pub use doc_id::DocId;
 use index::{Entry, Index, IndexLog};
 use index_results::IndexResults;
@@ -26,7 +24,7 @@ use index_to_query::IndexToQuery;
 use match_distance::MatchDistance;
 use match_entry::MatchEntry;
 use presence::Presence;
-use search_query::SearchQuery;
+pub use search_query::SearchQuery;
 pub use search_results::SearchResults;
 pub use searcher::Searcher;
 use word_query::WordQuery;
