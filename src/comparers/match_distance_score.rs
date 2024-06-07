@@ -1,6 +1,7 @@
 use crate::{index_to_query::IndexToQuery, MatchDistance};
 use std::cmp::{min, Ordering};
 
+#[derive(Debug)]
 pub(super) struct MatchDistanceScore {
     dirty: bool,
     recs: Vec<Rec>,
@@ -94,7 +95,7 @@ impl PartialOrd for MatchDistanceScore {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct Rec {
     distance: Option<MatchDistance>,
     index: usize,

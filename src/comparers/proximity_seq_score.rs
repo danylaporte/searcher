@@ -1,6 +1,7 @@
 use crate::IndexToQuery;
 use std::cmp::{max, min, Ordering};
 
+#[derive(Debug)]
 pub(super) struct ProximitySeqScore {
     count: usize,
     locations: Vec<Option<usize>>,

@@ -1,4 +1,4 @@
-use crate::{presence::Presence, word_query_op::WordQueryOp, WordQuery};
+use crate::{presence::Presence, word_query_op::WordQueryOp, MinMatchLevel, WordQuery};
 use std::{iter::Peekable, str::Chars};
 use str_utils::char_map::lower_no_accent_char;
 
@@ -22,6 +22,21 @@ impl SearchQuery {
 
     pub fn is_empty(&self) -> bool {
         self.words.is_empty()
+    }
+
+    /// Force the minimal level of matching.
+    pub fn set_min_match_level(&mut self, level: MinMatchLevel) {
+        match level {
+            MinMatchLevel::Contains => {
+                self.words.iter_mut().for_each(|w| {
+                    if matches!(w.op, WordQueryOp::Fuzzy) {
+                        w.op = WordQueryOp::Contains;
+                    }
+                });
+            }
+            MinMatchLevel::Equal => self.words.iter_mut().for_each(|w| w.op = WordQueryOp::Eq),
+            MinMatchLevel::Fuzzy => {}
+        }
     }
 }
 

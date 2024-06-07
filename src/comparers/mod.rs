@@ -7,6 +7,7 @@ use proximity_seq_score::ProximitySeqScore;
 use std::{
     cell::Cell,
     cmp::{min, Ordering},
+    fmt::{self, Debug, Formatter},
     mem::swap,
 };
 
@@ -58,6 +59,7 @@ impl Comparer {
             let o = l.cmp(r);
 
             if o.is_ne() {
+                dbg!(1, &lside, &rside);
                 return o;
             }
 
@@ -66,6 +68,7 @@ impl Comparer {
             let o = l.cmp(r);
 
             if o.is_ne() {
+                dbg!(2, &lside, &rside);
                 return o;
             }
         }
@@ -84,6 +87,7 @@ impl Default for Comparer {
     }
 }
 
+#[derive(Debug)]
 struct WorkingSet {
     match_distance: MatchDistanceScore,
     proximity_seq: ProximitySeqScore,
@@ -187,5 +191,15 @@ impl<'a> Side<'a> {
         }
 
         &self.set.proximity_seq
+    }
+}
+
+impl<'a> Debug for Side<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Side")
+            .field("attrs_priorities", &self.attrs_priorities)
+            .field("doc_id", &self.doc_id)
+            .field("set", &self.set)
+            .finish()
     }
 }

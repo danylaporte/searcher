@@ -1,4 +1,4 @@
-#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct DocId(pub(crate) u32);
 
 impl DocId {

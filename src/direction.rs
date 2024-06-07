@@ -1,4 +1,4 @@
-#[derive(Clone, Copy, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum Direction {
     #[default]
     Forward,
