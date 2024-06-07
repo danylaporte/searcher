@@ -35,3 +35,14 @@ fn multiple_word() {
         Ordering::Less
     );
 }
+
+#[test]
+fn one_vs_multiple_word() {
+    let searcher = searcher(&["encours", "en cours"]);
+    let results = searcher.query(&SearchQuery::new("encours"));
+
+    assert_eq!(
+        compare(DocId::from(0), &results, DocId::from(1), &results),
+        Ordering::Less
+    );
+}
