@@ -15,7 +15,7 @@ pub(crate) struct IndexToQuery<'a> {
 impl<'a> IndexToQuery<'a> {
     /// Add a match entry associated with a query, keeping only the best matches.
     pub fn add(&mut self, query: &WordQuery, match_entry: MatchEntry<'a>) {
-        match self.map.entry(match_entry.word) {
+        match self.map.entry(&*match_entry.entry.word) {
             Entry::Occupied(mut o) => {
                 let o = o.get_mut();
 

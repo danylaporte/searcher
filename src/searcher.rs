@@ -5,12 +5,14 @@ use crate::{
 use indexmap::IndexMap;
 use once_cell::sync::OnceCell;
 use roaring::RoaringBitmap;
+use std::mem::take;
 
 pub struct Searcher {
     attrs: IndexMap<Box<str>, Attr, fxhash::FxBuildHasher>,
     attrs_priorities: OnceCell<Vec<Vec<(Direction, usize)>>>,
     backward: Index,
     forward: Index,
+    index_log: IndexLog,
 }
 
 impl Searcher {
@@ -20,6 +22,7 @@ impl Searcher {
             attrs_priorities: Default::default(),
             backward: Index::new(Direction::Backward),
             forward: Index::new(Direction::Forward),
+            index_log: IndexLog::default(),
         }
     }
 
@@ -45,14 +48,15 @@ impl Searcher {
     }
 
     pub fn insert_doc_attribute(&mut self, doc_id: DocId, name: &str, value: &str) {
-        let mut log = IndexLog::default();
-
         if let Some(a) = self.attrs.get(name) {
+            let mut log = take(&mut self.index_log);
             let direction = a.direction;
             let attr_index = a.index;
 
             self.direction_index_mut(direction)
                 .insert_doc_attribute(doc_id, attr_index, value, &mut log);
+
+            self.index_log = log;
         }
     }
 

@@ -1,6 +1,6 @@
 use crate::{Direction, DocId, MatchDistance, MatchEntry, WordQuery, WordQueryOp};
 use fxhash::FxBuildHasher;
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexSet;
 use levenshtein_automata::Distance;
 use roaring::RoaringBitmap;
 use std::{cmp::min, iter::Peekable, mem::take, str::Chars};
@@ -49,22 +49,33 @@ impl Doc {
 }
 
 pub(crate) struct Entry {
-    pub docs: RoaringBitmap,
     len: u8,
+    pub(crate) docs: RoaringBitmap,
+    pub(crate) word: Box<str>,
+}
+
+impl Entry {
+    fn new(word: Box<str>) -> Self {
+        Self {
+            docs: RoaringBitmap::new(),
+            len: min(word.chars().count(), u8::MAX as usize) as u8,
+            word,
+        }
+    }
 }
 
 pub(crate) struct Index {
     direction: Direction,
     docs: Vec<Doc>,
-    map: IndexMap<Box<str>, Entry, FxBuildHasher>,
+    words: Vec<Entry>,
 }
 
 impl Index {
-    pub(crate) fn new(direction: Direction) -> Self {
+    pub(crate) const fn new(direction: Direction) -> Self {
         Self {
             direction,
-            map: Default::default(),
             docs: Vec::new(),
+            words: Vec::new(),
         }
     }
 
@@ -78,33 +89,23 @@ impl Index {
             Direction::Forward => word,
         };
 
-        let out = match self.map.get_full_mut(r) {
-            Some((_, k, doc)) => {
-                doc.docs.insert(doc_id.0);
-                &**k
-            }
-            None => {
-                let mut docs = RoaringBitmap::new();
-
-                docs.insert(doc_id.0);
-
-                let len = min(r.chars().count(), u8::MAX as usize) as u8;
-                let key = r.to_string().into_boxed_str();
-                let ptr: *const str = &*key;
-
-                self.map.insert_sorted(key, Entry { docs, len });
-
-                ptr
+        let index = match self.binary_search_word(r) {
+            Ok(index) => index,
+            Err(index) => {
+                self.words.insert(index, Entry::new(r.into()));
+                index
             }
         };
 
-        s.clear();
+        let entry = unsafe { self.words.get_unchecked_mut(index) };
 
-        out
+        entry.docs.insert(doc_id.0);
+
+        &*entry.word
     }
 
     fn binary_search_word(&self, word: &str) -> Result<usize, usize> {
-        self.map.binary_search_by_key(&word, |k, _| &**k)
+        self.words.binary_search_by_key(&word, |e| &e.word)
     }
 
     fn binary_search_word_full(&self, word: &str) -> usize {
@@ -117,14 +118,17 @@ impl Index {
     /// Removes all docs that do not contains the word.
     /// If the word is no more associated with a document, the word is removed.
     fn clean_word(&mut self, word: &str, log_docs: &mut Vec<u32>) {
-        let Some((_, w, entry)) = self.map.get_full_mut(word) else {
+        let Ok(index) = self.binary_search_word(word) else {
             return;
         };
+
+        let entry = unsafe { self.words.get_unchecked_mut(index) };
+        let w: *const str = word;
 
         let doc_ids_to_remove = entry.docs.iter().filter(|doc_id| {
             self.docs
                 .get(*doc_id as usize)
-                .map_or(true, |doc| !doc.contains_word(&**w))
+                .map_or(true, |doc| !doc.contains_word(w))
         });
 
         log_docs.extend(doc_ids_to_remove);
@@ -133,11 +137,11 @@ impl Index {
             entry.docs.remove(*id);
         });
 
-        log_docs.clear();
-
         if entry.docs.is_empty() {
-            self.map.shift_remove(word);
+            self.words.swap_remove(index);
         }
+
+        log_docs.clear();
     }
 
     fn contains<'a>(&'a self, q: &WordQuery, out: &mut Vec<MatchEntry<'a>>) {
@@ -167,11 +171,12 @@ impl Index {
     fn eq<'a>(&'a self, query: &WordQuery, out: &mut Vec<MatchEntry<'a>>) {
         let word = query.directional_word(self.direction);
 
-        if let Some((word, entry)) = self.map.get_key_value(word) {
+        if let Ok(index) = self.binary_search_word(word) {
+            let entry = unsafe { self.words.get_unchecked(index) };
+
             out.push(MatchEntry {
                 distance: MatchDistance::Exact(0),
                 entry,
-                word,
             });
         }
     }
@@ -179,18 +184,14 @@ impl Index {
     fn find<'a>(
         &'a self,
         start: usize,
-        matcher: impl Fn(&str, &Entry) -> Option<MatchDistance>,
+        matcher: impl Fn(&Entry) -> Option<MatchDistance>,
         out: &mut Vec<MatchEntry<'a>>,
     ) {
-        let iter = self.map.as_slice()[start..]
+        let iter = self
+            .words
             .iter()
-            .filter_map(|(word, entry)| {
-                matcher(word, entry).map(|distance| MatchEntry {
-                    distance,
-                    entry,
-                    word,
-                })
-            });
+            .skip(start)
+            .filter_map(|entry| matcher(entry).map(|distance| MatchEntry { distance, entry }));
 
         out.extend(iter);
     }
@@ -204,9 +205,9 @@ impl Index {
     ) {
         self.find(
             start,
-            |word, data| {
-                if matcher(word) {
-                    Some(MatchDistance::Exact(data.len - query.len))
+            |entry| {
+                if matcher(&entry.word) {
+                    Some(MatchDistance::Exact(entry.len - query.len))
                 } else {
                     None
                 }
@@ -219,13 +220,13 @@ impl Index {
         match query.directional_dfa(self.direction) {
             Some(dfa) => self.find(
                 0,
-                |word, data| match dfa.eval(word) {
+                |entry| match dfa.eval(&*entry.word) {
                     Distance::AtLeast(_) => None,
                     Distance::Exact(0) => Some(MatchDistance::Exact(
-                        data.len.saturating_sub(query.len) + query.len.saturating_sub(data.len),
+                        entry.len.saturating_sub(query.len) + query.len.saturating_sub(entry.len),
                     )),
                     Distance::Exact(n) => Some(MatchDistance::Fuzzy(
-                        (data.len.saturating_sub(query.len) + query.len.saturating_sub(data.len))
+                        (entry.len.saturating_sub(query.len) + query.len.saturating_sub(entry.len))
                             .saturating_add(n),
                     )),
                 },
@@ -388,7 +389,7 @@ impl Index {
         self.docs.swap_remove(removed_index);
 
         if last_index > removed_index {
-            self.map.retain(|_, entry| {
+            self.words.retain_mut(|entry| {
                 if entry.docs.remove(last_index as u32) {
                     entry.docs.insert(removed_index as u32);
                     true
@@ -398,7 +399,7 @@ impl Index {
                 }
             });
         } else {
-            self.map.retain(|_, entry| {
+            self.words.retain_mut(|entry| {
                 !entry.docs.remove(removed_index as u32) || !entry.docs.is_empty()
             });
         }
@@ -425,8 +426,11 @@ unsafe impl Sync for Index {}
 pub(crate) struct IndexLog {
     docs: Vec<u32>,
     str: String,
-    words: IndexSet<*const str, fxhash::FxBuildHasher>,
+    words: IndexSet<*const str, FxBuildHasher>,
 }
+
+unsafe impl Send for IndexLog {}
+unsafe impl Sync for IndexLog {}
 
 #[cfg(test)]
 mod tests {
@@ -605,15 +609,15 @@ mod tests {
         assert_eq!(index.docs.len(), 1);
 
         assert_eq!(
-            index.map.keys().map(|s| &**s).collect::<Vec<_>>(),
+            index.words.iter().map(|e| &*e.word).collect::<Vec<_>>(),
             vec!["air", "france"]
         );
 
         assert_eq!(
             index
-                .map
+                .words
                 .iter()
-                .fold(RoaringBitmap::new(), |acc, entry| acc | &entry.1.docs)
+                .fold(RoaringBitmap::new(), |acc, entry| acc | &entry.docs)
                 .into_iter()
                 .collect::<Vec<_>>(),
             vec![0]
@@ -638,15 +642,15 @@ mod tests {
         assert_eq!(index.docs.len(), 1);
 
         assert_eq!(
-            index.map.keys().map(|s| &**s).collect::<Vec<_>>(),
+            index.words.iter().map(|e| &*e.word).collect::<Vec<_>>(),
             vec!["air", "canada"]
         );
 
         assert_eq!(
             index
-                .map
+                .words
                 .iter()
-                .fold(RoaringBitmap::new(), |acc, entry| acc | &entry.1.docs)
+                .fold(RoaringBitmap::new(), |acc, entry| acc | &entry.docs)
                 .into_iter()
                 .collect::<Vec<_>>(),
             vec![0]

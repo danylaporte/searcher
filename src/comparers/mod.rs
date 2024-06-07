@@ -71,7 +71,10 @@ impl Comparer {
         }
 
         // This is important if we compare different searcher together, which may not have the same number of attributes.
-        rside.attrs_priorities.len().cmp(&lside.attrs_priorities.len())
+        rside
+            .attrs_priorities
+            .len()
+            .cmp(&lside.attrs_priorities.len())
     }
 }
 
