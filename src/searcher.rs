@@ -7,9 +7,11 @@ use once_cell::sync::OnceCell;
 use roaring::RoaringBitmap;
 use std::mem::take;
 
+type DirectionIndex = (Direction, usize);
+
 pub struct Searcher {
     attrs: IndexMap<Box<str>, Attr, fxhash::FxBuildHasher>,
-    attrs_priorities: OnceCell<Vec<Vec<(Direction, usize)>>>,
+    attrs_priorities: OnceCell<Vec<(u8, Vec<DirectionIndex>)>>,
     backward: Index,
     forward: Index,
     index_log: IndexLog,
@@ -26,17 +28,18 @@ impl Searcher {
         }
     }
 
-    pub(crate) fn attrs_priorities(&self) -> &[Vec<(Direction, usize)>] {
+    pub(crate) fn attrs_priorities(&self) -> &[(u8, Vec<DirectionIndex>)] {
         self.attrs_priorities.get_or_init(|| {
-            let mut map = IndexMap::<u8, Vec<(Direction, usize)>, fxhash::FxBuildHasher>::default();
+            let mut map = IndexMap::<u8, Vec<DirectionIndex>, fxhash::FxBuildHasher>::default();
 
             self.attrs.values().for_each(|a| {
                 map.entry(a.priority)
                     .or_default()
                     .push((a.direction, a.index))
             });
+
             map.sort_unstable_keys();
-            map.into_values().collect()
+            map.into_iter().collect()
         })
     }
 
@@ -132,6 +135,7 @@ impl Searcher {
             .filter(|a| a.direction == direction)
             .enumerate()
             .for_each(|(index, a)| a.index = index);
+
         self.attrs_priorities = OnceCell::new();
     }
 

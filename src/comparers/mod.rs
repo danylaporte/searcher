@@ -6,7 +6,7 @@ use match_distance_score::MatchDistanceScore;
 use proximity_seq_score::ProximitySeqScore;
 use std::{
     cell::Cell,
-    cmp::{min, Ordering},
+    cmp::Ordering,
     fmt::{self, Debug, Formatter},
     mem::swap,
 };
@@ -49,35 +49,38 @@ impl Comparer {
     ) -> Ordering {
         let mut lside = Side::new(lid, lres, &mut self.left);
         let mut rside = Side::new(rid, rres, &mut self.right);
-        let attr_priority_count = min(lside.attrs_priorities.len(), rside.attrs_priorities.len());
 
         let set = &mut self.set;
 
-        for attr_priority_index in 0..attr_priority_count {
-            let l = lside.match_distance(attr_priority_index, set);
-            let r = rside.match_distance(attr_priority_index, set);
+        for ((l_priority, l_attrs), (r_priority, r_attrs)) in
+            lside.attrs_priorities.iter().zip(rside.attrs_priorities)
+        {
+            let l = lside.match_distance(l_attrs, set);
+            let r = rside.match_distance(r_attrs, set);
             let o = l.cmp(r);
 
             if o.is_ne() {
-                dbg!(1, &lside, &rside);
-                return o;
+                return if l_priority == r_priority {
+                    o
+                } else {
+                    Ordering::Equal
+                };
             }
 
-            let l = lside.proximity_seq(attr_priority_index, set);
-            let r = rside.proximity_seq(attr_priority_index, set);
+            let l = lside.proximity_seq(l_attrs, set);
+            let r = rside.proximity_seq(r_attrs, set);
             let o = l.cmp(r);
 
             if o.is_ne() {
-                dbg!(2, &lside, &rside);
-                return o;
+                return if l_priority == r_priority {
+                    o
+                } else {
+                    Ordering::Equal
+                };
             }
         }
 
-        // This is important if we compare different searcher together, which may not have the same number of attributes.
-        rside
-            .attrs_priorities
-            .len()
-            .cmp(&lside.attrs_priorities.len())
+        Ordering::Equal
     }
 }
 
@@ -139,7 +142,7 @@ impl WorkingSet {
 }
 
 struct Side<'a> {
-    attrs_priorities: &'a [Vec<(Direction, usize)>],
+    attrs_priorities: &'a [(u8, Vec<(Direction, usize)>)],
     doc_id: DocId,
     set: &'a mut WorkingSet,
     results: &'a SearchResults<'a>,
@@ -157,18 +160,16 @@ impl<'a> Side<'a> {
 
     fn match_distance<'b>(
         &'b mut self,
-        attr_priority_index: usize,
+        attrs: &[(Direction, usize)],
         temp_set: &mut WorkingSet,
     ) -> &'b MatchDistanceScore {
         self.set.match_distance.clear();
 
-        if let Some(a) = self.attrs_priorities.get(attr_priority_index) {
-            for &(direction, attr_index) in a {
-                let results = self.results.direction_index_results(direction);
+        for &(direction, attr_index) in attrs {
+            let results = self.results.direction_index_results(direction);
 
-                self.set
-                    .match_distance(temp_set, self.doc_id, attr_index, results);
-            }
+            self.set
+                .match_distance(temp_set, self.doc_id, attr_index, results);
         }
 
         &self.set.match_distance
@@ -176,18 +177,16 @@ impl<'a> Side<'a> {
 
     fn proximity_seq<'b>(
         &'b mut self,
-        attr_priority_index: usize,
+        attrs: &[(Direction, usize)],
         temp_set: &mut WorkingSet,
     ) -> &'b ProximitySeqScore {
         self.set.proximity_seq.clear();
 
-        if let Some(a) = self.attrs_priorities.get(attr_priority_index) {
-            for &(direction, attr_index) in a {
-                let results = self.results.direction_index_results(direction);
+        for &(direction, attr_index) in attrs {
+            let results = self.results.direction_index_results(direction);
 
-                self.set
-                    .proximity_seq(temp_set, self.doc_id, attr_index, results);
-            }
+            self.set
+                .proximity_seq(temp_set, self.doc_id, attr_index, results);
         }
 
         &self.set.proximity_seq

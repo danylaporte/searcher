@@ -175,7 +175,7 @@ impl Index {
             let entry = unsafe { self.words.get_unchecked(index) };
 
             out.push(MatchEntry {
-                distance: MatchDistance::Exact(0),
+                distance: MatchDistance(0),
                 entry,
             });
         }
@@ -207,7 +207,7 @@ impl Index {
             start,
             |entry| {
                 if matcher(&entry.word) {
-                    Some(MatchDistance::Exact(entry.len - query.len))
+                    Some(MatchDistance(entry.len - query.len))
                 } else {
                     None
                 }
@@ -222,12 +222,9 @@ impl Index {
                 0,
                 |entry| match dfa.eval(&*entry.word) {
                     Distance::AtLeast(_) => None,
-                    Distance::Exact(0) => Some(MatchDistance::Exact(
-                        entry.len.saturating_sub(query.len) + query.len.saturating_sub(entry.len),
-                    )),
-                    Distance::Exact(n) => Some(MatchDistance::Fuzzy(
-                        (entry.len.saturating_sub(query.len) + query.len.saturating_sub(entry.len))
-                            .saturating_add(n),
+                    Distance::Exact(n) => Some(MatchDistance(
+                        entry.len.saturating_sub(query.len)
+                            + query.len.saturating_sub(entry.len).saturating_add(n),
                     )),
                 },
                 out,
@@ -465,8 +462,8 @@ mod tests {
         assert_eq!(
             matches,
             vec![
-                (MatchDistance::Exact(6), "seirtnuoc"),
-                (MatchDistance::Exact(4), "yrtnuoc")
+                (MatchDistance(6), "seirtnuoc"),
+                (MatchDistance(4), "yrtnuoc")
             ]
         );
     }
@@ -484,8 +481,8 @@ mod tests {
         assert_eq!(
             matches,
             vec![
-                (MatchDistance::Exact(6), "countries"),
-                (MatchDistance::Exact(4), "country")
+                (MatchDistance(6), "countries"),
+                (MatchDistance(4), "country")
             ]
         );
     }
@@ -500,7 +497,7 @@ mod tests {
             &mut matches,
         );
 
-        assert_eq!(matches, vec![(MatchDistance::Exact(4), "yrtnuoc")]);
+        assert_eq!(matches, vec![(MatchDistance(4), "yrtnuoc")]);
     }
 
     #[test]
@@ -513,7 +510,7 @@ mod tests {
             &mut matches,
         );
 
-        assert_eq!(matches, vec![(MatchDistance::Exact(4), "country")]);
+        assert_eq!(matches, vec![(MatchDistance(4), "country")]);
     }
 
     #[test]
@@ -526,7 +523,7 @@ mod tests {
             &mut matches,
         );
 
-        assert_eq!(matches, vec![(MatchDistance::Exact(0), "yrtnuoc")]);
+        assert_eq!(matches, vec![(MatchDistance(0), "yrtnuoc")]);
     }
 
     #[test]
@@ -539,7 +536,7 @@ mod tests {
             &mut matches,
         );
 
-        assert_eq!(matches, vec![(MatchDistance::Exact(0), "country")]);
+        assert_eq!(matches, vec![(MatchDistance(0), "country")]);
     }
 
     #[test]
@@ -552,7 +549,7 @@ mod tests {
             &mut matches,
         );
 
-        assert_eq!(matches, vec![(MatchDistance::Exact(0), "yrtnuoc")]);
+        assert_eq!(matches, vec![(MatchDistance(0), "yrtnuoc")]);
     }
 
     #[test]
@@ -568,8 +565,8 @@ mod tests {
         assert_eq!(
             matches,
             vec![
-                (MatchDistance::Fuzzy(3), "countries"),
-                (MatchDistance::Exact(0), "country")
+                (MatchDistance(3), "countries"),
+                (MatchDistance(0), "country")
             ]
         );
     }
@@ -584,7 +581,7 @@ mod tests {
             &mut matches,
         );
 
-        assert_eq!(matches, vec![(MatchDistance::Fuzzy(5), "country"),]);
+        assert_eq!(matches, vec![(MatchDistance(5), "country"),]);
     }
 
     #[test]
@@ -597,7 +594,7 @@ mod tests {
             &mut matches,
         );
 
-        assert_eq!(matches, vec![(MatchDistance::Exact(0), "dmo"),]);
+        assert_eq!(matches, vec![(MatchDistance(0), "dmo"),]);
     }
 
     #[test]
@@ -679,8 +676,8 @@ mod tests {
         assert_eq!(
             matches,
             vec![
-                (MatchDistance::Exact(5), "seirtnuoc"),
-                (MatchDistance::Exact(3), "yrtnuoc")
+                (MatchDistance(5), "seirtnuoc"),
+                (MatchDistance(3), "yrtnuoc")
             ]
         );
     }
@@ -698,8 +695,8 @@ mod tests {
         assert_eq!(
             matches,
             vec![
-                (MatchDistance::Exact(5), "countries"),
-                (MatchDistance::Exact(3), "country")
+                (MatchDistance(5), "countries"),
+                (MatchDistance(3), "country")
             ]
         );
     }
