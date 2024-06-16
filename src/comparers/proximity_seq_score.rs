@@ -7,6 +7,7 @@ pub(super) struct ProximitySeqScore {
     locations: Vec<Option<usize>>,
     proximity: usize,
     seq: usize,
+    start_at: usize,
 }
 
 impl ProximitySeqScore {
@@ -16,6 +17,7 @@ impl ProximitySeqScore {
             locations: Vec::new(),
             proximity: 0,
             seq: 0,
+            start_at: usize::MAX,
         }
     }
 
@@ -38,6 +40,10 @@ impl ProximitySeqScore {
                 self.seq = 0;
             }
 
+            if self.count == 1 {
+                self.start_at = min(self.start_at, word_location);
+            }
+
             self.update_proximity_seq();
         }
     }
@@ -48,6 +54,7 @@ impl ProximitySeqScore {
             self.locations.iter_mut().for_each(|o| *o = None);
             self.proximity = 0;
             self.seq = 0;
+            self.start_at = usize::MAX;
         }
     }
 
@@ -70,12 +77,12 @@ impl ProximitySeqScore {
 
     fn update_proximity_seq(&mut self) {
         if self.count > 1 {
-            let (prox, seq) = self.locations.iter().filter_map(|l| *l).fold(
-                (Proximity::new(), Seq::default()),
-                |(mut prox, mut seq), index| {
+            let (prox, seq, start) = self.locations.iter().filter_map(|l| *l).fold(
+                (Proximity::new(), Seq::default(), usize::MAX),
+                |(mut prox, mut seq, start), index| {
                     prox.add(index);
                     seq.add(index);
-                    (prox, seq)
+                    (prox, seq, min(start, index))
                 },
             );
 
@@ -86,6 +93,7 @@ impl ProximitySeqScore {
             if self.proximity > prox {
                 self.proximity = prox;
                 self.seq = seq.seq;
+                self.start_at = start;
             }
         }
     }
@@ -102,6 +110,10 @@ impl Ord for ProximitySeqScore {
 
             if o.is_eq() {
                 o = other.seq.cmp(&self.seq);
+            }
+
+            if o.is_eq() {
+                o = self.start_at.cmp(&other.start_at);
             }
         }
 

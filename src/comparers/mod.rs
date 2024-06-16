@@ -25,14 +25,15 @@ pub fn compare(lid: DocId, lres: &SearchResults, rid: DocId, rres: &SearchResult
     })
 }
 
-struct Comparer {
+#[derive(Debug)]
+pub struct Comparer {
     left: WorkingSet,
     right: WorkingSet,
     set: WorkingSet,
 }
 
 impl Comparer {
-    const fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             left: WorkingSet::new(),
             right: WorkingSet::new(),
@@ -40,7 +41,7 @@ impl Comparer {
         }
     }
 
-    fn compare(
+    pub fn compare(
         &mut self,
         lid: DocId,
         lres: &SearchResults,
@@ -52,35 +53,35 @@ impl Comparer {
 
         let set = &mut self.set;
 
-        for ((l_priority, l_attrs), (r_priority, r_attrs)) in
-            lside.attrs_priorities.iter().zip(rside.attrs_priorities)
-        {
-            let l = lside.match_distance(l_attrs, set);
-            let r = rside.match_distance(r_attrs, set);
-            let o = l.cmp(r);
+        let mut l = lside.attrs_priorities.iter();
+        let mut r = rside.attrs_priorities.iter();
 
-            if o.is_ne() {
-                return if l_priority == r_priority {
-                    o
-                } else {
-                    Ordering::Equal
-                };
-            }
+        loop {
+            match (l.next(), r.next()) {
+                (Some((_l_priority, l_attrs)), Some((_r_priority, r_attrs))) => {
+                    let l = lside.match_distance(l_attrs, set);
+                    let r = rside.match_distance(r_attrs, set);
+                    let o = l.cmp(r);
 
-            let l = lside.proximity_seq(l_attrs, set);
-            let r = rside.proximity_seq(r_attrs, set);
-            let o = l.cmp(r);
+                    if o.is_ne() {
+                        return o;
+                    }
 
-            if o.is_ne() {
-                return if l_priority == r_priority {
-                    o
-                } else {
-                    Ordering::Equal
-                };
+                    let l = lside.proximity_seq(l_attrs, set);
+                    let r = rside.proximity_seq(r_attrs, set);
+                    let o = l.cmp(r);
+
+                    if o.is_ne() {
+                        return o;
+                    }
+                }
+
+                // Reverse Option here.
+                (None, Some(_)) => return Ordering::Greater,
+                (Some(_), None) => return Ordering::Less,
+                (None, None) => return Ordering::Equal,
             }
         }
-
-        Ordering::Equal
     }
 }
 
@@ -151,7 +152,7 @@ struct Side<'a> {
 impl<'a> Side<'a> {
     fn new(doc_id: DocId, results: &'a SearchResults<'a>, set: &'a mut WorkingSet) -> Self {
         Self {
-            attrs_priorities: results.searcher.attrs_priorities(),
+            attrs_priorities: results.searcher.attrs_priorities(results.culture),
             doc_id,
             results,
             set,

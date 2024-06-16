@@ -2,27 +2,22 @@ use crate::{index_to_query::IndexToQuery, MatchDistance};
 use std::cmp::{min, Ordering};
 
 #[derive(Debug)]
-pub(super) struct MatchDistanceScore {
-    dirty: bool,
-    recs: Vec<Rec>,
-}
+pub(super) struct MatchDistanceScore(Vec<Rec>);
 
 impl MatchDistanceScore {
     pub const fn new() -> Self {
-        Self {
-            dirty: false,
-            recs: Vec::new(),
-        }
+        Self(Vec::new())
     }
 
     /// Add a distance keeping only the best matches for each query.
     fn add_word(&mut self, index: &IndexToQuery, word: *const str) {
         if let Some(entry) = index.get(word) {
-            let rec = match self.recs.get_mut(entry.query_index) {
+            let rec = match self.0.get_mut(entry.query_index) {
                 Some(rec) => rec,
                 None => {
-                    self.ensure_size(index.query_len());
-                    self.recs.get_mut(entry.query_index).expect("index")
+                    self.0
+                        .extend((self.0.len()..index.query_len()).map(Rec::new));
+                    self.0.get_mut(entry.query_index).expect("index")
                 }
             };
 
@@ -30,29 +25,11 @@ impl MatchDistanceScore {
                 Some(d) => min(d, entry.distance),
                 None => entry.distance,
             });
-
-            self.dirty = true;
         }
     }
 
     pub(super) fn clear(&mut self) {
-        if self.dirty {
-            self.recs
-                .iter_mut()
-                .enumerate()
-                .for_each(|(index, r)| *r = Rec::new(index));
-
-            self.dirty = false;
-        }
-    }
-
-    fn ensure_size(&mut self, len: usize) {
-        if self.recs.len() < len {
-            let from = self.recs.len();
-            let range = from..len;
-
-            self.recs.extend(range.map(Rec::new));
-        }
+        self.0.clear();
     }
 
     /// Add a list of words and compute the match distance score.
@@ -63,9 +40,8 @@ impl MatchDistanceScore {
             self.add_word(index, *word);
         }
 
-        if self.dirty {
-            self.recs.sort_unstable();
-        }
+        self.0.retain(|t| t.distance.is_some());
+        self.0.sort_unstable();
     }
 }
 
@@ -73,19 +49,29 @@ impl Eq for MatchDistanceScore {}
 
 impl Ord for MatchDistanceScore {
     fn cmp(&self, other: &Self) -> Ordering {
-        let mut o = self.recs.is_empty().cmp(&other.recs.is_empty());
+        let mut l = self.0.iter();
+        let mut r = other.0.iter();
 
-        if o.is_eq() {
-            o = self.recs.cmp(&other.recs);
+        loop {
+            match (l.next(), r.next()) {
+                (Some(l), Some(r)) => {
+                    let o = l.cmp(r);
+
+                    if o.is_ne() {
+                        return o;
+                    }
+                }
+                (None, Some(_)) => return Ordering::Greater,
+                (Some(_), None) => return Ordering::Less,
+                (None, None) => return Ordering::Equal,
+            }
         }
-
-        o
     }
 }
 
 impl PartialEq for MatchDistanceScore {
     fn eq(&self, other: &Self) -> bool {
-        self.recs == other.recs
+        self.0 == other.0
     }
 }
 

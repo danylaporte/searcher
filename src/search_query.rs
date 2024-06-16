@@ -3,11 +3,12 @@ use std::{iter::Peekable, str::Chars};
 use str_utils::char_map::lower_no_accent_char;
 
 pub struct SearchQuery {
+    pub(crate) culture: u8,
     pub(crate) words: Vec<WordQuery>,
 }
 
 impl SearchQuery {
-    pub fn new(s: &str) -> Self {
+    pub fn new(culture: u8, s: &str) -> Self {
         let mut chars = s.chars().peekable();
         let mut words = Vec::new();
 
@@ -17,7 +18,7 @@ impl SearchQuery {
             }
         }
 
-        Self { words }
+        Self { culture, words }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -37,12 +38,6 @@ impl SearchQuery {
             MinMatchLevel::Equal => self.words.iter_mut().for_each(|w| w.op = WordQueryOp::Eq),
             MinMatchLevel::Fuzzy => {}
         }
-    }
-}
-
-impl From<&str> for SearchQuery {
-    fn from(value: &str) -> Self {
-        SearchQuery::new(value)
     }
 }
 
@@ -124,19 +119,19 @@ where
 #[test]
 fn single_word() {
     assert_eq!(
-        SearchQuery::new("start*").words,
+        SearchQuery::new(0, "start*").words,
         vec![("start", WordQueryOp::StartsWith)]
     );
     assert_eq!(
-        SearchQuery::new("*end").words,
+        SearchQuery::new(0, "*end").words,
         vec![("end", WordQueryOp::EndsWith)]
     );
     assert_eq!(
-        SearchQuery::new("*contains*").words,
+        SearchQuery::new(0, "*contains*").words,
         vec![("contains", WordQueryOp::Contains)]
     );
     assert_eq!(
-        SearchQuery::new("fuzzy").words,
+        SearchQuery::new(0, "fuzzy").words,
         vec![("fuzzy", WordQueryOp::Fuzzy)]
     );
 }
@@ -144,7 +139,7 @@ fn single_word() {
 #[test]
 fn multiple_words() {
     assert_eq!(
-        SearchQuery::new("starT* *eNd *Contains* Fuzzy").words,
+        SearchQuery::new(0, "starT* *eNd *Contains* Fuzzy").words,
         vec![
             ("start", WordQueryOp::StartsWith),
             ("end", WordQueryOp::EndsWith),

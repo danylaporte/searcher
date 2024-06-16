@@ -1,10 +1,7 @@
 use crate::{presence::Presence, Direction, WordQueryOp};
 use levenshtein_automata::{LevenshteinAutomatonBuilder, DFA};
 use once_cell::sync::OnceCell;
-use std::{
-    cmp::min,
-    fmt::{self, Debug, Formatter},
-};
+use std::fmt::{self, Debug, Formatter};
 
 pub(crate) struct WordQuery {
     backward_dfa: OnceCell<Option<DFA>>,
@@ -12,7 +9,6 @@ pub(crate) struct WordQuery {
     dfa: OnceCell<Option<DFA>>,
 
     /// chars len
-    pub len: u8,
     pub index: usize,
     pub op: WordQueryOp,
     pub presence: Presence,
@@ -26,15 +22,14 @@ impl WordQuery {
             backward_word: OnceCell::new(),
             dfa: OnceCell::new(),
             index,
-            len: min(word.chars().count(), u8::MAX as usize) as u8,
             op,
             presence,
             word,
         }
     }
 
-    fn backward_dfa(&self) -> Option<&DFA> {
-        init_dfa(&self.backward_dfa, self.backward_word(), self.len)
+    pub(crate) fn backward_dfa(&self) -> Option<&DFA> {
+        init_dfa(&self.backward_dfa, self.backward_word())
     }
 
     pub(crate) fn backward_word(&self) -> &str {
@@ -42,15 +37,8 @@ impl WordQuery {
             .get_or_init(|| self.word.chars().rev().collect::<String>().into_boxed_str())
     }
 
-    fn dfa(&self) -> Option<&DFA> {
-        init_dfa(&self.dfa, &self.word, self.len)
-    }
-
-    pub(crate) fn directional_dfa(&self, direction: Direction) -> Option<&DFA> {
-        match direction {
-            Direction::Forward => self.dfa(),
-            Direction::Backward => self.backward_dfa(),
-        }
+    pub(crate) fn dfa(&self) -> Option<&DFA> {
+        init_dfa(&self.dfa, &self.word)
     }
 
     pub(crate) fn directional_word(&self, direction: Direction) -> &str {
@@ -78,12 +66,15 @@ impl PartialEq<(&str, WordQueryOp)> for WordQuery {
     }
 }
 
-fn init_dfa<'a>(dfa: &'a OnceCell<Option<DFA>>, word: &str, len: u8) -> Option<&'a DFA> {
-    dfa.get_or_init(|| match len {
+pub(crate) fn create_dfa(word: &str) -> Option<DFA> {
+    match word.chars().count() {
         0..=2 => None,
         3..=5 => Some(LevenshteinAutomatonBuilder::new(1, true).build_prefix_dfa(word)),
         6..=8 => Some(LevenshteinAutomatonBuilder::new(2, true).build_prefix_dfa(word)),
         9.. => Some(LevenshteinAutomatonBuilder::new(3, true).build_prefix_dfa(word)),
-    })
-    .as_ref()
+    }
+}
+
+fn init_dfa<'a>(dfa: &'a OnceCell<Option<DFA>>, word: &str) -> Option<&'a DFA> {
+    dfa.get_or_init(|| create_dfa(word)).as_ref()
 }

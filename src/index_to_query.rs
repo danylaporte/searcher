@@ -14,21 +14,21 @@ pub(crate) struct IndexToQuery<'a> {
 
 impl<'a> IndexToQuery<'a> {
     /// Add a match entry associated with a query, keeping only the best matches.
-    pub fn add(&mut self, query: &WordQuery, match_entry: MatchEntry<'a>) {
-        match self.map.entry(&*match_entry.entry.word) {
+    pub(crate) fn add(&mut self, query: &WordQuery, match_entry: MatchEntry<'a>) {
+        match self.map.entry(match_entry.word) {
             Entry::Occupied(mut o) => {
                 let o = o.get_mut();
 
                 if (o.distance, o.query_index) > (match_entry.distance, query.index) {
                     o.distance = match_entry.distance;
-                    o.docs = &match_entry.entry.docs;
+                    o.docs = match_entry.docs;
                     o.query_index = query.index;
                 }
             }
             Entry::Vacant(v) => {
                 v.insert(IndexToQueryEntry {
                     distance: match_entry.distance,
-                    docs: &match_entry.entry.docs,
+                    docs: match_entry.docs,
                     query_index: query.index,
                 });
             }
@@ -37,23 +37,27 @@ impl<'a> IndexToQuery<'a> {
         self.query_len = max(self.query_len, query.index + 1);
     }
 
-    pub fn extend<I: IntoIterator<Item = MatchEntry<'a>>>(&mut self, query: &WordQuery, it: I) {
+    pub(crate) fn extend<I: IntoIterator<Item = MatchEntry<'a>>>(
+        &mut self,
+        query: &WordQuery,
+        it: I,
+    ) {
         for match_entry in it {
             self.add(query, match_entry)
         }
     }
 
-    pub fn get(&self, word: *const str) -> Option<&IndexToQueryEntry<'a>> {
+    pub(crate) fn get(&self, word: *const str) -> Option<&IndexToQueryEntry<'a>> {
         self.map.get(&word)
     }
 
-    pub fn query_len(&self) -> usize {
+    pub(crate) fn query_len(&self) -> usize {
         self.query_len
     }
 }
 
 pub(crate) struct IndexToQueryEntry<'a> {
-    pub distance: MatchDistance,
-    pub docs: &'a RoaringBitmap,
-    pub query_index: usize,
+    pub(crate) distance: MatchDistance,
+    pub(crate) docs: &'a RoaringBitmap,
+    pub(crate) query_index: usize,
 }
