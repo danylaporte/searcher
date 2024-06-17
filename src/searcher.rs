@@ -401,4 +401,36 @@ mod tests {
             vec!["balance", "encours", "total"]
         );
     }
+
+    #[test]
+    fn search_mandatory() {
+        let mut searcher = Searcher::new();
+        searcher.set_attribute("*".into(), AttrProps::default());
+
+        searcher.insert_doc_attribute(DocId::from(0), "*", "balance echue");
+        searcher.insert_doc_attribute(DocId::from(1), "*", "balance courante");
+        searcher.insert_doc_attribute(DocId::from(2), "*", "valeur courante");
+
+        let results = searcher.query(&SearchQuery::new(0, "+balance courante"));
+
+        assert!(!results.contains_doc_id(DocId::from(0)));
+        assert!(results.contains_doc_id(DocId::from(1)));
+        assert!(!results.contains_doc_id(DocId::from(2)));
+    }
+
+    #[test]
+    fn search_denied() {
+        let mut searcher = Searcher::new();
+        searcher.set_attribute("*".into(), AttrProps::default());
+
+        searcher.insert_doc_attribute(DocId::from(0), "*", "balance echue");
+        searcher.insert_doc_attribute(DocId::from(1), "*", "balance courante");
+        searcher.insert_doc_attribute(DocId::from(2), "*", "valeur courante");
+
+        let results = searcher.query(&SearchQuery::new(0, "-balance courante"));
+
+        assert!(!results.contains_doc_id(DocId::from(0)));
+        assert!(!results.contains_doc_id(DocId::from(1)));
+        assert!(results.contains_doc_id(DocId::from(2)));
+    }
 }
